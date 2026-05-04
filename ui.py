@@ -20,6 +20,27 @@ class LocalSendAction(InterfaceAction):
         self.qaction.setIcon(icon)
         self.qaction.triggered.connect(self.send_books)
 
+    def initialization_complete(self):
+        # Conectar al cambio de selección de la vista de biblioteca
+        self.gui.library_view.selectionModel().selectionChanged.connect(
+            self._update_enabled)
+        self._update_enabled()
+
+    def location_selected(self, loc):
+        # Solo activo en la biblioteca (no cuando hay un dispositivo USB
+        # seleccionado, etc.)
+        self.qaction.setEnabled(loc == 'library' and self._has_selection())
+
+    def _has_selection(self):
+        try:
+            return bool(
+                self.gui.library_view.selectionModel().selectedRows())
+        except Exception:
+            return False
+
+    def _update_enabled(self, *args):
+        self.qaction.setEnabled(self._has_selection())
+
     # ------------------------------------------------------------------
     def send_books(self):
         from qt.core import QDialog
