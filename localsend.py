@@ -5,11 +5,12 @@ import mimetypes
 from urllib.request import Request, urlopen
 
 
-def send_to_localsend(filepath, target_ip, port=53317):
-    filename = os.path.basename(filepath)
+def send_to_localsend(filepath, target_ip, port=53317, filename=None):
+    if filename is None:
+        filename = os.path.basename(filepath)
     size = os.path.getsize(filepath)
     file_id = str(uuid.uuid4())
-    mime = mimetypes.guess_type(filepath)[0] or 'application/octet-stream'
+    mime = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
 
     prepare_payload = {
         "info": {
@@ -34,29 +35,20 @@ def send_to_localsend(filepath, target_ip, port=53317):
     }
 
     url = f"http://{target_ip}:{port}/api/localsend/v2/prepare-upload"
-    req = Request(
-        url,
-        data=json.dumps(prepare_payload).encode('utf-8'),
-        headers={'Content-Type': 'application/json'}
-    )
+    req = Request(url,
+                  data=json.dumps(prepare_payload).encode('utf-8'),
+                  headers={'Content-Type': 'application/json'})
     with urlopen(req, timeout=60) as r:
         resp = json.loads(r.read())
 
     session_id = resp['sessionId']
     token = resp['files'][file_id]
 
-    upload_url = (
-        f"http://{target_ip}:{port}/api/localsend/v2/upload"
-        f"?sessionId={session_id}&fileId={file_id}&token={token}"
-    )
-
+    upload_url = (f"http://{target_ip}:{port}/api/localsend/v2/upload"
+                  f"?sessionId={session_id}&fileId={file_id}&token={token}")
     with open(filepath, 'rb') as f:
         data = f.read()
-
-    req = Request(
-        upload_url,
-        data=data,
-        headers={'Content-Type': 'application/octet-stream'}
-    )
+    req = Request(upload_url, data=data,
+                  headers={'Content-Type': 'application/octet-stream'})
     with urlopen(req, timeout=300) as r:
         r.read()
