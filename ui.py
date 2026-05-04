@@ -17,6 +17,9 @@ class LocalSendAction(InterfaceAction):
     action_type = 'current'
 
     def genesis(self):
+        # get_icons es inyectada por Calibre en el namespace del plugin
+        icon = get_icons('images/icon.png', 'Send via LocalSend')
+        self.qaction.setIcon(icon)
         self.qaction.triggered.connect(self.send_books)
 
     def send_books(self):
@@ -80,7 +83,7 @@ class LocalSendAction(InterfaceAction):
                 try:
                     send_to_localsend(send_path, target_ip,
                                       filename=send_filename)
-                    sent.append(title)
+                    sent.append(f'{title}  [{method}]')
                 except Exception as e:
                     errors.append(f'{title}: {e}')
         finally:
