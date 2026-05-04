@@ -4,7 +4,7 @@ class LocalSendPlugin(InterfaceActionBase):
     name = 'Send via LocalSend'
     description = 'Envía libros al Kobo mediante LocalSend'
     supported_platforms = ['windows', 'osx', 'linux']
-    author = 'Tu Nombre'
+    author = 'Fernando Martin'
     version = (1, 0, 0)
     minimum_calibre_version = (5, 0, 0)
     actual_plugin = 'calibre_plugins.localsend_plugin.ui:LocalSendAction'
