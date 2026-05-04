@@ -1,7 +1,4 @@
-import os
 import re
-import shutil
-import tempfile
 
 from calibre.gui2.actions import InterfaceAction
 from calibre.gui2 import error_dialog, info_dialog
@@ -13,7 +10,8 @@ def _safe_name(s):
 
 class LocalSendAction(InterfaceAction):
     name = 'Send via LocalSend'
-    action_spec = ('Send via LocalSend', None, 'Envía libro por LocalSend', None)
+    action_spec = ('Send via LocalSend', None,
+                   'Envía libro por LocalSend', None)
     action_type = 'current'
 
     def genesis(self):
@@ -22,11 +20,10 @@ class LocalSendAction(InterfaceAction):
         self.qaction.setIcon(icon)
         self.qaction.triggered.connect(self.send_books)
 
+    # ------------------------------------------------------------------
     def send_books(self):
         from qt.core import QDialog
-        from calibre_plugins.localsend_plugin.localsend import send_to_localsend
         from calibre_plugins.localsend_plugin.device_dialog import DeviceDialog
-        from calibre_plugins.localsend_plugin.kepub import convert_epub_to_kepub
         from calibre_plugins.localsend_plugin.config import prefs
 
         rows = self.gui.library_view.selectionModel().selectedRows()
@@ -38,60 +35,89 @@ class LocalSendAction(InterfaceAction):
         if dlg.exec() != QDialog.DialogCode.Accepted or not dlg.selected_ip:
             return
         target_ip = dlg.selected_ip
-
         kepubify = bool(prefs['kepubify'])
+
+        # Preparar lista de libros (todo lo que necesite I/O de la
+        # biblioteca lo hacemos aquí, en el hilo de UI)
         db = self.gui.current_db.new_api
+        books = []
+        skipped = []
 
-        sent, errors = [], []
-        temp_files = []
+        for row in rows:
+            book_id = self.gui.library_view.model().id(row)
+            title = db.field_for('title', book_id) or 'untitled'
+            authors = db.field_for('authors', book_id) or ()
+            author_str = ' & '.join(authors) if authors else 'Unknown'
+            base_name = _safe_name(f'{title} - {author_str}')
 
-        try:
-            for row in rows:
-                book_id = self.gui.library_view.model().id(row)
-                title = db.field_for('title', book_id) or 'untitled'
-                authors = db.field_for('authors', book_id) or ()
-                author_str = ' & '.join(authors) if authors else 'Unknown'
-                base_name = _safe_name(f'{title} - {author_str}')
+            if db.has_format(book_id, 'KEPUB'):
+                fmt = 'KEPUB'
+                path = db.format_abspath(book_id, 'KEPUB')
+                send_filename = f'{base_name}.kepub.epub'
+            elif db.has_format(book_id, 'EPUB'):
+                fmt = 'EPUB'
+                path = db.format_abspath(book_id, 'EPUB')
+                # Si vamos a kepubificar, lo guardamos como .kepub.epub
+                send_filename = (f'{base_name}.kepub.epub'
+                                 if kepubify else f'{base_name}.epub')
+            else:
+                skipped.append(f'{title}: sin EPUB/KEPUB')
+                continue
 
-                send_path = None
-                send_filename = None
+            books.append({
+                'book_id': book_id,
+                'title': title,
+                'format': fmt,
+                'path': path,
+                'send_filename': send_filename,
+            })
 
-                # 1. Si ya hay KEPUB en la biblioteca, usarlo
-                if db.has_format(book_id, 'KEPUB'):
-                    send_path = db.format_abspath(book_id, 'KEPUB')
-                    send_filename = f'{base_name}.kepub.epub'
+        if not books:
+            return error_dialog(
+                self.gui, 'LocalSend',
+                'Ninguno de los libros seleccionados tiene formato EPUB/KEPUB.\n\n' +
+                '\n'.join(skipped),
+                show=True)
 
-                # 2. Si hay EPUB, kepubificar (o no) según preferencia
-                elif db.has_format(book_id, 'EPUB'):
-                    epub_path = db.format_abspath(book_id, 'EPUB')
-                    if kepubify:
-                        try:
-                            tmp_path, method = convert_epub_to_kepub(epub_path)
-                            temp_files.append(tmp_path)
-                            send_path = tmp_path
-                            send_filename = f'{base_name}.kepub.epub'
-                        except Exception as e:
-                            errors.append(f'{title}: error kepubificando: {e}')
-                            continue
-                    else:
-                        send_path = epub_path
-                        send_filename = f'{base_name}.epub'
-                else:
-                    errors.append(f'{title}: sin formato EPUB/KEPUB')
-                    continue
+        # Lanzar el job en background
+        from calibre.gui2.threaded_jobs import ThreadedJob
+        from calibre_plugins.localsend_plugin.job import send_books_job
 
-                try:
-                    send_to_localsend(send_path, target_ip,
-                                      filename=send_filename)
-                    sent.append(f'{title}  [{method}]')
-                except Exception as e:
-                    errors.append(f'{title}: {e}')
-        finally:
-            for p in temp_files:
-                try:
-                    os.remove(p)
-                except Exception:
-                    pass
+        description = (f'LocalSend → {target_ip}: '
+                       f'{len(books)} libro(s)')
+
+        job = ThreadedJob(
+            'localsend_send_books',     # tipo
+            description,                 # descripción visible
+            send_books_job,              # función
+            (target_ip, books, kepubify),
+            {},
+            self._on_send_done,          # callback al terminar
+            killable=True,
+        )
+        self.gui.job_manager.run_threaded_job(job)
+
+        # Pequeño aviso en la status bar
+        self.gui.status_bar.show_message(
+            f'LocalSend: enviando {len(books)} libro(s)…', 5000)
+
+        # Si hubo libros saltados, avisamos ya
+        if skipped:
+            info_dialog(
+                self.gui, 'LocalSend',
+                'Algunos libros no se enviarán:\n• ' + '\n• '.join(skipped),
+                show=True)
+
+    # ------------------------------------------------------------------
+    def _on_send_done(self, job):
+        if job.failed:
+            # job.failed True si la función lanzó excepción
+            return self.gui.job_exception(
+                job, dialog_title='LocalSend: error')
+
+        result = job.result or {'sent': [], 'errors': []}
+        sent = result.get('sent', [])
+        errors = result.get('errors', [])
 
         msg = ''
         if sent:
