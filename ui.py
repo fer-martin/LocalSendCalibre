@@ -14,13 +14,51 @@ class LocalSendAction(InterfaceAction):
                    'Envía libro por LocalSend', None)
     action_type = 'current'
 
+    # Localizaciones donde queremos que aparezca por defecto
+    DEFAULT_LOCATIONS = (
+        'action-layout-toolbar',          # barra principal
+        'action-layout-context-menu',     # clic derecho en biblioteca
+        # 'action-layout-menubar',        # barra de menú clásica
+        # 'action-layout-context-menu-cover-browser',
+        # 'action-layout-context-menu-split',
+    )
+
     def genesis(self):
         # get_icons es inyectada por Calibre en el namespace del plugin
         icon = get_icons('images/icon.png', 'Send via LocalSend')
         self.qaction.setIcon(icon)
         self.qaction.triggered.connect(self.send_books)
 
+    def _setup_default_placements(self):
+        """Añade el plugin a las localizaciones deseadas la primera vez.
+        Después respeta cualquier cambio que haga el usuario.
+        """
+        from calibre_plugins.localsend_plugin.config import prefs
+        if prefs.get('placements_initialized', False):
+            return
+
+        from calibre.gui2 import gprefs
+
+        changed = False
+        for key in self.DEFAULT_LOCATIONS:
+            current = list(gprefs.get(key, ()))
+            if self.name not in current:
+                current.append(self.name)
+                gprefs[key] = current
+                changed = True
+
+        prefs['placements_initialized'] = True
+
+        # Refrescar barras y menús sin reiniciar
+        if changed:
+            try:
+                self.gui.bars_manager.init_bars()
+            except Exception:
+                # Si fallara, simplemente se aplicará al siguiente reinicio
+                pass
+
     def initialization_complete(self):
+        self._setup_default_placements()
         # Conectar al cambio de selección de la vista de biblioteca
         self.gui.library_view.selectionModel().selectionChanged.connect(
             self._update_enabled)

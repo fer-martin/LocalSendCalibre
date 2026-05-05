@@ -4,6 +4,7 @@ from calibre.utils.config import JSONConfig
 
 prefs = JSONConfig('plugins/localsend')
 prefs.defaults['kepubify'] = True
+prefs.defaults['placements_initialized'] = False
 
 class ConfigWidget(QWidget):
     def __init__(self):
