@@ -1,5 +1,9 @@
 # LocalSend for Calibre
 
+[![Release](https://img.shields.io/github/v/release/fer-martin/LocalSendCalibre?logo=github)](../../releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/fer-martin/LocalSendCalibre/total?logo=github)](../../releases)
+[![Receiver: LocalSendKobo](https://img.shields.io/badge/receiver-LocalSendKobo-blue?logo=go)](https://github.com/fer-martin/LocalSendKobo)
+
 A [Calibre](https://calibre-ebook.com/) plugin that transfers books to any device running [LocalSend](https://localsend.org/) over your local network — with automatic conversion to KEPUB for Kobo e-readers.
 
 ![screenshot placeholder](docs/screenshot.png)
@@ -85,6 +89,25 @@ Then restart Calibre.
 ## Contributing
 
 Issues and pull requests welcome. Please describe your environment (OS, Calibre version, receiving device) and include relevant log output (`calibre-debug -g`) when reporting bugs.
+
+## Companion tool: kobo-localsend
+
+LocalSendCalibre talks to **any** LocalSend v2 receiver, but it pairs especially well with **[kobo-localsend](https://github.com/fer-martin/LocalSendKobo)** — a minimal receiver written in Go for Kobo e-readers. Together they give you a one-click pipeline from your Calibre library to your Kobo, over Wi-Fi, with no cables and no Calibre Companion server.
+
+**What kobo-localsend adds on the Kobo side:**
+
+- Single static binary (~5 MB), no Python or runtime to install.
+- Native Nickel integration: toast on each completed transfer, modal *Stop* dialog while it's running, automatic library rescan when books arrive.
+- Auto-discoverable on the local Wi-Fi (shows up as e.g. `Kobo Aura 1234`).
+- Installable via NickelMenu so you can toggle it from the device UI.
+
+**Typical workflow:**
+
+1. On the Kobo: NickelMenu → **LocalSend (start)**.
+2. In Calibre: right-click a book → **Send via LocalSend** → pick your Kobo.
+3. The file is transferred over Wi-Fi, the on-device toast confirms `Received: <title>.epub`, and the Nickel library is rescanned automatically — the book shows up on the home screen.
+
+See the [kobo-localsend README](https://github.com/fer-martin/LocalSendKobo#readme) for build & installation instructions.
 
 ## License
 
